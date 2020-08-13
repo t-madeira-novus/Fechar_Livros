@@ -6,28 +6,70 @@ import json
 import os
 import shutil
 
-from selenium import webdriver
-from selenium.common.exceptions import StaleElementReferenceException, ElementNotInteractableException
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.action_chains import ActionChains
-
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
-from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-def _pegar_ultimo_arquivo_modificado (search_dir):
-    savedPath = os.getcwd()
+def _completa_cnpj(cnpj):
+    print(cnpj)
+    if len(str(cnpj)) < 14:
+        diferenca = 14 - len(str(cnpj))
+        cnpj_aux = cnpj
+        cnpj = str(0) * diferenca
+        cnpj += cnpj_aux
+        return cnpj
+    else:
+        return str(cnpj)
+
+
+def _exclui_arquivos(search_dir, string):
+    """Excluir arquivos com a string no nome e que estejam no path"""
+
+    saved_path = os.getcwd()
+    try:
+        os.chdir(search_dir)
+    except:
+        os.mkdir(search_dir)
+        return
+
+    files = filter(os.path.isfile, os.listdir(search_dir))
+    files = [os.path.join(search_dir, f) for f in files]  # add path to each file
+    indices = []  #lista pra guardar indices de arquivos que contem string
+
+    i = 0
+    for file in files:
+        if string in file:
+            indices.append(i)
+        i += 1
+
+    for i in indices:
+        try:
+            os.remove(files[i])
+        except:
+            pass
+
+    os.chdir(saved_path)
+
+def _esperar(segundos):
+    i = 0
+    while i < segundos:
+        time.sleep(1)
+        if i < segundos:
+            time.sleep(1)
+        i += 1
+
+
+def _pegar_ultimo_arquivo_modificado(search_dir):
+    saved_path = os.getcwd()
     os.chdir(search_dir)
     files = filter(os.path.isfile, os.listdir(search_dir))
-    files = [os.path.join(search_dir, f) for f in files] # add path to each file
+    files = [os.path.join(search_dir, f) for f in files]  # add path to each file
     files.sort(key=lambda x: os.path.getmtime(x))
-    os.chdir(savedPath)
+    os.chdir(saved_path)
 
     return files[-1]
+
 
 def _converte_mes(mes):
     if str(mes) == "Janeiro":
@@ -55,123 +97,177 @@ def _converte_mes(mes):
     elif str(mes) == "Dezembro":
         return "12"
 
+
 def _aceitar_notas(ano, mes, browser):
-    browser.switch_to.window(browser.window_handles[-1]) # Troca de janela
+    _esperar(2)
+    browser.switch_to.window(browser.window_handles[-1])  # Troca de janela
+    _esperar(2)
     browser.find_element_by_xpath("//*[contains(text(), 'Serviços Tomados')]").click()
     browser.find_element_by_xpath("//*[contains(text(), 'Declarar Notas Tomadas')]").click()
     browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/div[2]/ul/li[2]").click()
     browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/div[2]/div/div[2]/div[2]/input").click()
-    time.sleep(1) # Esperar para o alerta ser gerado
-    alert = browser.switch_to.alert # Aceitar o alerta
-    qtd_notas = [int(s) for s in str.split(alert.text) if s.isdigit()] # qtd de notas existentes na página
+
+    _esperar(4)
+    alert = browser.switch_to.alert  # Mudar para o alerta
+    qtd_notas = [int(s) for s in str.split(alert.text) if s.isdigit()]  # qtd de notas existentes na página
     qtd_notas = qtd_notas[0]
-    alert.accept()
+    alert.accept()  # Aceitar o alerta
+
+    _esperar(2)
 
     if qtd_notas > 0:
         mes = _converte_mes(mes)
-        i = 1
-        while i <= qtd_notas:
-            aux = "/html/body/div[1]/section/div/div/div/form/div[2]/div/div[2]/div[1]/div[" +str(i)+ "]/div[4]/div[6]/select"
+
+        i = qtd_notas
+        while i >= 1:
+            _esperar(2)
+            aux = "/html/body/div[1]/section/div/div/div/form/div[2]/div/div[2]/div[1]/div[" + str(
+                i) + "]/div[5]/div[1]/select"
             aux = browser.find_element_by_xpath(aux).text
             mes_aux = aux[-2:]
             ano_aux = aux[:4]
-            if mes_aux != mes or str(ano_aux) != str(ano): # se a nota não for da competência....
-                # browser.find_element_by_xpath(
-                  #  "/html/body/div[1]/section/div/div/div/form/div[2]/div/div[2]/div[1]/div[" + str(
-                   #     i) + "]/div[9]/input").click() # .... clicar em remover
-                pass
-            i += 1
+            if mes_aux != mes or str(ano_aux) != str(ano):  # se a nota não for da competência....
 
-    #_clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[3]/input")
+                print(mes_aux, mes, ano_aux, ano, i)
+                browser.find_element_by_xpath(
+                    "/html/body/div[1]/section/div/div/div/form/div[2]/div/div[2]/div[1]/div[" + str(
+                        i) + "]/div[11]/input").click()  # .... clicar em remover
+            i -= 1
+
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[3]/input")
+    try:
+        WebDriverWait(browser, 3).until(ec.alert_is_present())
+        browser.switch_to.alert.accept()  # Aceitar o alerta
+    except:
+        pass
+
 
 def _clicar_pelo_XPATH(browser, xpath):
     time.sleep(1)
     button = browser.find_element_by_xpath(xpath)
     ActionChains(browser).move_to_element(button).click(button).perform()
 
-def _relatorio_tomados(nome_contabil, ano, mes, browser):
+
+def _relatorio_tomados(nome_pasta, ano, mes, browser):
     path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Contábil\\NFSe tomados\\"
     mes_aux = _converte_mes(mes)+"."+ano
-    path += nome_contabil + "\\" + ano + "\\" + mes_aux
-    try:
+    path += nome_pasta + "\\" + ano + "\\" + mes_aux
+    try:  # Tenta criar a pasta da competência
         os.mkdir(path)
-        print (path)
-    except FileNotFoundError:
-        try:
+    except FileNotFoundError:  # Caso não exista a pasta com o ano...
+        try:  # ... tenta criar a pasta com o ano e depois a pasta da competência, dentro da pasta do ano.
             path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Contábil\\NFSe tomados\\"
-            path += nome_contabil + "\\" + ano
+            path += nome_pasta + "\\" + ano
             os.mkdir(path)
             path += "\\" + mes_aux
             os.mkdir(path)
-        except FileNotFoundError:
+        except FileNotFoundError: # Se não conseguir criar a pasta do ano, é pq não existe a pasta da empresa
             return "Não existe pasta"
-    except FileExistsError:
+    except FileExistsError: # Se a pasta já existir, continua
         pass
 
     _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Livro Digital')]") # Clicar em Livro Digital
     browser.find_elements_by_xpath("//*[contains(text(), 'Livro Digital')]")[1].click() # Clicar em Livro Digital, de novo (nao posso usar a funcao para clicar por casa da ambiguidade)
-    time.sleep(1)
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form[2]/input[3]") # Clicar em Gerar Novo Livro Digital
-    time.sleep(1)
     browser.find_element_by_id("tipodec").find_element_by_xpath("//option[@value='T']").click() # Selecionar livros Tomados
-    time.sleep(5) # Esperar carregar as informações dos livros
+    if "FECHAR O LIVRO E GERAR A O DAM" in str(browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/div/form/div[3]/div/select").text):
+        dam = True
+    else:
+        dam = False
+
     elem = browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/div/form/div[4]/div/span")
+    _esperar(5)
     aux = str(elem.get_attribute('style'))[str(str(elem.get_attribute('style'))).find(":")+2:-1] # Descobrir se o livro tá aberto ou fechado
 
+    # try: # Livro está aberto
     if aux == "none": # Livro está aberto
         _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/div/form/div[6]/div/input")  # Clicar em Gerar
-        browser.switch_to.alert.accept()  # Aceitar o alerta
-        browser.switch_to.alert.accept()  # Aceitar o alerta
+        _esperar(5)
 
-        time.sleep(1)
+        try:
+            browser.switch_to.alert.accept()  # Aceitar o alerta
+            browser.switch_to.alert.accept()  # Aceitar o alerta
+        except:
+            pass
+
         browser.switch_to.window(browser.window_handles[0])
         browser.switch_to.window(browser.window_handles[-1])
-        time.sleep(1)
+
+        _esperar(5)
+
         browser.execute_script('window.print();')
-        time.sleep(1)
+        _esperar(5)
         browser.close()
 
-        time.sleep(1)
-        browser.switch_to.window(browser.window_handles[0])
-        browser.switch_to.window(browser.window_handles[-1])
-        time.sleep(1)
-        browser.execute_script('window.print();')
-        time.sleep(1)
-        browser.close()
-        browser.switch_to.window(browser.window_handles[0])
-        browser.switch_to.window(browser.window_handles[-1])
-
-        origem = _pegar_ultimo_arquivo_modificado("C:\\Users\\"+os.getlogin()+"\Downloads")
+        origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\" + os.getlogin() + "\Downloads")
         destino = path
-        shutil.move(origem, destino)
+        try:
+            shutil.move(origem, destino)
+        except:
+            pass
 
+        browser.switch_to.window(browser.window_handles[0])
+        browser.switch_to.window(browser.window_handles[-1])
+
+        if dam == True:
+
+            _esperar(5)
+
+            browser.execute_script('window.print();')
+
+            _esperar(5)
+
+            browser.close()
+            browser.switch_to.window(browser.window_handles[0])
+            browser.switch_to.window(browser.window_handles[-1])
+
+            origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\"+os.getlogin()+"\Downloads")
+            destino = path
+            try:
+                shutil.move(origem, destino)
+            except:
+                os.remove(origem)
+
+        return "Arquivos Salvos"
+
+    # except: # Livro está fechado
     elif aux == "inline": # Livro está fechado
-        _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Relatórios')]") # Clicar em Relatórios
-        _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Relatório de Notas Aceitas')]") # Clicar em Relatórios
         competencia = str(ano) + '-' + str(_converte_mes(mes))
-        time.sleep(1)
-        browser.find_elements_by_xpath("//option[@value='" + competencia + "']")[1].click()  # Selecionar oeríodo final
-        browser.find_element_by_xpath("//option[@value='" + competencia + "']").click()  # Selecionar período inicial
-        time.sleep(1)
-        _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[3]/div/input") # Clicar em Gerar Relatório
+        try:
+            _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Relatórios')]") # Clicar em Relatórios
+            _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Relatório de Notas Aceitas')]")  # Clicar em Relatórios de Notas Aceitas
+            browser.find_elements_by_xpath("//option[@value='" + competencia + "']")[1].click()  # Selecionar oeríodo final
+            browser.find_element_by_xpath("//option[@value='" + competencia + "']").click()  # Selecionar período inicial
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[3]/div/input") # Clicar em Gerar Relatório
 
-        time.sleep(1)
+        except: # Eh comercio
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/div[1]/div[2]/div/div[2]/div/nav/ul/li[3]/a")  # Clicar em Livro Digital
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/div[1]/div[2]/div/div[2]/div/nav/ul/li[3]/ul/li[1]/a")  # Clicar em Livro Digital de novo
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form[2]/div[1]/input")  # Clicar em Procurar
+            browser.find_elements_by_xpath("//option[@value='" + competencia + "']")[1].click()  # Selecionar oeríodo final
+            browser.find_element_by_xpath("//option[@value='" + competencia + "']").click()  # Selecionar período inicial
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form[2]/div[2]/input[1]")  # Clicar em Procurar
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form[2]/table/tbody[3]/tr[1]/td[2]/a")  # Clicar no primeiro resultado
+
         browser.switch_to.window(browser.window_handles[0])
         browser.switch_to.window(browser.window_handles[-1])
-        time.sleep(1)
         browser.execute_script('window.print();')
-        time.sleep(1)
         browser.close()
         browser.switch_to.window(browser.window_handles[0])
         browser.switch_to.window(browser.window_handles[-1])
 
-        origem = _pegar_ultimo_arquivo_modificado("C:\\Users\\"+os.getlogin()+"\Downloads")
+        origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\"+os.getlogin()+"\Downloads")
         destino = path
-        shutil.move(origem, destino)
+        try:
+            shutil.move(origem, destino)
+        except:
+            os.remove(origem)
+        return "Arquivos Salvos"
 
 def _pdf_notas_tomados(nome_contabil, ano, mes, browser):
     path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Contábil\\NFSe tomados\\"
-    path += nome_contabil + "\\" + ano + "\\" + mes
+    mes_aux = _converte_mes(mes) + "." + ano
+    path += nome_contabil + "\\" + ano + "\\" + mes_aux
 
     #browser.switch_to.window(browser.window_handles[-1])
 
@@ -181,6 +277,7 @@ def _pdf_notas_tomados(nome_contabil, ano, mes, browser):
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[1]/input") # Campo de Procurar
     browser.find_element_by_id("ListGeneratorFind_periodoTrib").find_element_by_xpath("//option[@value='"+competencia+"']").click() # Selecionar competencia
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/input[8]") # Botão Procurar
+    _esperar(2)
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/thead/tr/th[1]/input") # Marcar caixinha
     try:
         _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/tbody[1]/tr/td/a") # Selecionar todos
@@ -191,18 +288,26 @@ def _pdf_notas_tomados(nome_contabil, ano, mes, browser):
         return False
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form[1]/input[3]") # PDF
 
-    time.sleep(1)
+    _esperar(5)
+
     browser.switch_to.window(browser.window_handles[0])
     browser.switch_to.window(browser.window_handles[-1])
-    time.sleep(1)
+
+    _esperar(5)
+    
     browser.execute_script('window.print();')
-    time.sleep(1)
+    _esperar(2)
     browser.close()
     browser.switch_to.window(browser.window_handles[-1])
 
-    origem = _pegar_ultimo_arquivo_modificado("C:\\Users\\"+os.getlogin()+"\Downloads")
+    origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\"+os.getlogin()+"\Downloads")
+    os.rename(origem, "E:\\Users\\thiago.madeira\\Downloads\\Notas.pdf")
+    origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\" + os.getlogin() + "\Downloads")
     destino = path
-    shutil.move(origem, destino)
+    try:
+        shutil.move(origem, destino)
+    except:
+        os.remove(origem)
 
     return True
 
@@ -213,298 +318,264 @@ def _exportar_notas_fiscais_tomados(nome_contabil, ano, mes, browser):
     competencia = str(ano)+'-'+str(_converte_mes(mes))
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[1]/input") # Campo de Procurar
     browser.find_element_by_id("ListGeneratorFind_periodoTrib").find_element_by_xpath("//option[@value='"+competencia+"']").click() # Selecionar competencia
-    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/input[8]") # Botão Procurar _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/thead/tr/th[1]/input") # Marcar caixinha
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/input[8]") # Botão Procurar
+    _esperar(3)
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/thead/tr/th[1]/input") # Marcar caixinha
     try:
         _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/tbody[1]/tr/td/a")  # Selecionar todos
     except:
         return
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/tbody[1]/tr/td/a") # Selecionar todos
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form[1]/input[7]") # Exportar Xml Abrasf 2.02
+
+    _esperar(3)
+
+    browser.switch_to.window(browser.window_handles[-1])
     browser.close()
     browser.switch_to.window(browser.window_handles[-1])
 
-    origem = _pegar_ultimo_arquivo_modificado("C:\\Users\\"+os.getlogin()+"\Downloads")
+    origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\"+os.getlogin()+"\Downloads")
     destino = path
-    shutil.move(origem, destino)
+    _exclui_arquivos(destino, ".xml")
+    try:
+        shutil.move(origem, destino)
+    except:
+        os.remove(origem)
 
-# def _relatorio_prestados(nome_fiscal, ano, mes, segundos, cnpj):
-#     path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Fiscal\Impostos\Federais\Empresas\\"
-#     path += nome_fiscal + "\\" + ano + "\\" + mes
-#     try:
-#         os.mkdir(path)
-#     except FileNotFoundError:
-#         try:
-#             path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Fiscal\Impostos\Federais\Empresas\\"
-#             path += nome_fiscal + "\\" + ano
-#             os.mkdir(path)
-#             path += "\\" + mes
-#             if path[-1] == " ":
-#                 path = path[:-1]
-#             os.mkdir(path)
-#         except FileNotFoundError:
-#             return "nao existe pasta"
-#     except FileExistsError:
-#         pass
-#
-#     # Fechar download antigo
-#     pyautogui.click(X=1421, Y=836)
-#     # time.sleep(segundos-1)
-#
-#     # Clicar no campo de CNPJ
-#     _limpar_campo(X=275, Y=407)
-#     pyautogui.click(X=275, Y=407)
-#     # time.sleep(segundos)
-#
-#     # Digitar CNPJ
-#     kb.type_this(cnpj)
-#     # time.sleep(segundos)
-#
-#     # Enter
-#     kb.press_this(Key.enter)
-#     time.sleep(segundos)
-#
-#     if pyautogui.locateOnScreen("imgs/nao_achou.png", confidence=0.8) != None:
-#         return "nao_achou"
-#
-#     # Clique em Prestador
-#     pyautogui.click(X=320, Y=677)
-#     time.sleep(segundos)
-#
-#     if pyautogui.locateOnScreen("imgs/eh_comercio.png", confidence=0.8) != None:
-#         # Fechar a aba
-#         kb.press_this_with_LCTRL("w")
-#         time.sleep(segundos)
-#         return "eh_comercio"
-#
-#     # Clique em Livro Digital
-#     pyautogui.click(X=1058, Y=137)
-#     time.sleep(segundos - 1)
-#
-#     # Clique no outro Livro Digital
-#     pyautogui.click(X=1056, Y=190)
-#     time.sleep(segundos)
-#
-#     # Clique Gerar Novo Livro Digital
-#     # Apertar END
-#     kb.press_this(Key.end)
-#     time.sleep(segundos)
-#     pyautogui.click(pyautogui.locateCenterOnScreen("imgs/gerar_novo_livro_digital.png", confidence=0.9))
-#     # pyautogui.click(316, 656)
-#     time.sleep(segundos + 2)
-#
-#     if pyautogui.locateCenterOnScreen("imgs/livro_fechado.png", confidence=0.5) == None:
-#
-#         # print (pyautogui.locateCenterOnScreen("imgs/livro_fechado.png", confidence=0.5))
-#         #
-#         # print(nome_fiscal, " : livro não gerado")
-#
-#         # Clique em Gerar
-#         pyautogui.click(X=255, Y=619)
-#         time.sleep(segundos + 2)
-#
-#         # Clique em OK
-#         pyautogui.click(X=890, Y=162)
-#         time.sleep(segundos)
-#
-#         # Clique em OK, de novo
-#         pyautogui.click(X=889, Y=183)
-#         time.sleep(segundos)
-#
-#         # Salvar o relatorio de prestados
-#         # Botao direito no centro da tela
-#         mc.right_click_at(X=670, Y=505)
-#         time.sleep(segundos)
-#
-#         # Clicar em imprimir
-#         pyautogui.click(X=718, Y=629)
-#         time.sleep(segundos)
-#
-#         # Clicar em Salvar
-#         pyautogui.click(X=1063, Y=690)
-#         time.sleep(segundos)
-#
-#         # Clique para digitar o caminho
-#         pyautogui.click(X=1082, Y=168)
-#         time.sleep(segundos)
-#
-#         # Digitar o caminho
-#         kb.type_this(path)
-#         time.sleep(segundos)
-#
-#         # Enter
-#         kb.press_this(Key.enter)
-#         time.sleep(segundos)
-#
-#         # Clicar em Salvar
-#         pyautogui.click(X=1189, Y=821)
-#         time.sleep(segundos)
-#
-#         if pyautogui.locateOnScreen("imgs/sobreescrita.png", confidence=0.8):
-#             pyautogui.press("left")
-#             pyautogui.press("enter")
-#
-#         # Fechar a aba
-#         kb.press_this_with_LCTRL("w")
-#         time.sleep(segundos)
-#
-#         return "relatorio prestados salvo"
-#
-#     else:
-#
-#         # Clicar em Relatórios
-#         pyautogui.click(X=1279, Y=136)
-#         time.sleep(segundos)
-#
-#         # Clicar em Relatórios de NFS'e Emitidas
-#         pyautogui.click(X=1319, Y=189)
-#         time.sleep(segundos)
-#
-#         # Clicar em Relatórios de NFS'e Emitidas
-#         pyautogui.click(X=1319, Y=189)
-#         time.sleep(segundos)
-#
-#         # Clicar em Selecionar o Período Inicial
-#         pyautogui.click(X=368, Y=364)
-#         time.sleep(segundos)
-#
-#         # Digitar período
-#         periodo = ano + "-" + mes[:2]
-#         kb.type_this(periodo)
-#         time.sleep(segundos)
-#
-#         # Enter
-#         kb.press_this(Key.enter)
-#         time.sleep(segundos)
-#
-#         # Clicar em Selecionar o Período Final
-#         pyautogui.click(X=1131, Y=364)
-#         time.sleep(segundos)
-#
-#         # Digitar período
-#         periodo = ano + "-" + mes[:2]
-#         kb.type_this(periodo)
-#         time.sleep(segundos)
-#
-#         # Enter
-#         kb.press_this(Key.enter)
-#         time.sleep(segundos)
-#
-#         # Clicar em Gerar Relatorio
-#         pyautogui.click(X=311, Y=409)
-#         time.sleep(segundos)
-#
-#         # Salvar o relatorio de prestados
-#         # Botao direito no centro da tela
-#         mc.right_click_at(X=670, Y=505)
-#         time.sleep(segundos)
-#
-#         # Clicar em imprimir
-#         pyautogui.click(X=718, Y=629)
-#         time.sleep(segundos)
-#
-#         # Clicar em Salvar
-#         pyautogui.click(X=1063, Y=690)
-#         time.sleep(segundos)
-#
-#         # Clique para digitar o caminho
-#         pyautogui.click(X=1082, Y=168)
-#         time.sleep(segundos)
-#
-#         # Digitar o caminho
-#         kb.type_this(path)
-#         time.sleep(segundos)
-#
-#         # Enter
-#         kb.press_this(Key.enter)
-#         time.sleep(segundos)
-#
-#         # Clicar em Salvar
-#         pyautogui.click(X=1189, Y=821)
-#         time.sleep(segundos)
-#
-#         if pyautogui.locateOnScreen("imgs/sobreescrita.png", confidence=0.8):
-#             pyautogui.press("left")
-#             pyautogui.press("enter")
-#
-#         # Fechar a aba
-#         kb.press_this_with_LCTRL("w")
-#         time.sleep(segundos)
-#
-#         return "relatorio prestados salvo"
-#
-#
-# def _exportar_notas_fiscais_prestados(nome_contabil, segundos):
-#     path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Contábil\\NFSe\\"
-#     path += nome_contabil
-#
-#     # Clicar em Notas Eletrônicas
-#     pyautogui.click(X=806, Y=139)
-#     time.sleep(segundos)
-#
-#     # Clicar em Exportar Notas
-#     # pyautogui.click(X=797,Y=435)
-#     pyautogui.click(pyautogui.locateCenterOnScreen("imgs/exportar_notas.png", confidence=0.8))
-#     time.sleep(segundos)
-#
-#     # Clicar em == Mes ==
-#     pyautogui.click(X=512, Y=360)
-#     time.sleep(segundos)
-#
-#     # Digitar o mes
-#     kb.type_this(_converte_mes())
-#     time.sleep(segundos)
-#
-#     # Enter
-#     kb.press_this(Key.enter)
-#     time.sleep(segundos)
-#
-#     # Clicar em == Ano ==
-#     pyautogui.click(X=815, Y=359)
-#     time.sleep(segundos)
-#
-#     # Digitar o ano
-#     kb.type_this(str(app.getEntry("ano")))
-#     time.sleep(segundos)
-#
-#     # Enter
-#     kb.press_this(Key.enter)
-#     time.sleep(segundos)
-#
-#     # Clicar em Exportar XML Abrasf 2.02
-#     pyautogui.click(X=841, Y=405)
-#     time.sleep(segundos + 1)
-#
-#     if pyautogui.locateCenterOnScreen("imgs/salvar_como.png", confidence=0.6) != None:
-#         print(nome_contabil, ": salvar xml")
-#
-#         # Clique para digitar o caminho
-#         pyautogui.click(X=1082, Y=168)
-#         time.sleep(segundos)
-#
-#         # Digitar o caminho
-#         kb.type_this(path)
-#         time.sleep(segundos)
-#
-#         # Enter
-#         kb.press_this(Key.enter)
-#         time.sleep(segundos)
-#
-#         # Clicar em Salvar
-#         pyautogui.click(X=1216, Y=819)
-#         time.sleep(segundos)
-#
-#     # Fechar a aba
-#     kb.press_this_with_LCTRL("w")
-#     time.sleep(segundos)
-#
-#     return "xml de notas prestados salvo"
+def _relatorio_prestados(nome_pasta, ano, mes, browser):
+    browser.switch_to.window(browser.window_handles[0])
+    browser.switch_to.window(browser.window_handles[-1])
+    elem = None
+    try: # Verificar se eh comercio
+        elem = browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/p")
+        if elem != None:
+            browser.close()
+            browser.switch_to.window(browser.window_handles[0])
+            browser.switch_to.window(browser.window_handles[-1])
+            return "Eh comércio"
+    except:
+        pass
+
+    desconsolidada = False
+    if browser.find_element_by_xpath("/html/body/div[1]/div[1]/div[3]/div/div[1]/div[2]").text == "DES CONSOLIDADA":
+        desconsolidada = True
+
+    path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Fiscal\Impostos\Federais\Empresas\\"
+    mes_aux = _converte_mes(mes)+"."+ano
+    path += nome_pasta + "\\" + ano + "\\" + mes_aux
+    try:
+        os.mkdir(path)
+    except FileNotFoundError:
+        try:
+            path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Fiscal\Impostos\Federais\Empresas\\"
+            path += nome_pasta + "\\" + ano
+            os.mkdir(path)
+            path += "\\" + mes
+            if path[-1] == " ":
+                path = path[:-1]
+            os.mkdir(path)
+        except FileNotFoundError:
+            return "Não existe pasta"
+    except FileExistsError:
+        pass
+
+
+    _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Livro Digital')]")  # Clicar em Livro Digital
+    browser.find_elements_by_xpath("//*[contains(text(), 'Livro Digital')]")[1].click()  # Clicar em Livro Digital, de novo (nao posso usar a funcao para clicar por casa da ambiguidade)
+    time.sleep(1)
+    _clicar_pelo_XPATH(browser,
+                       "/html/body/div[1]/section/div/div/div/form[2]/input[3]")  # Clicar em Gerar Novo Livro Digital
+    time.sleep(1)
+    elem = browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/div/form/div[4]/div/span")
+
+    # Gambiarra para forçar espera
+    i = 0
+    while i < 5:
+        if i < 5:
+            time.sleep(1)
+        i += 1
+
+    aux = str(elem.get_attribute('style'))[
+          str(str(elem.get_attribute('style'))).find(":") + 2:-1]  # Descobrir se o livro tá aberto ou fechado
+
+    if aux == "none": # Livro está aberto
+    #try:
+        _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/div/form/div[6]/div/input")  # Clicar em Gerar
+
+        WebDriverWait(browser, 3).until(ec.alert_is_present())
+        browser.switch_to.alert.accept()  # Aceitar o alerta
+        browser.switch_to.alert.accept()  # Aceitar o alerta
+
+        browser.switch_to.window(browser.window_handles[0])
+        browser.switch_to.window(browser.window_handles[-1])
+        browser.execute_script('window.print();')
+        browser.close()
+        browser.switch_to.window(browser.window_handles[0])
+        browser.switch_to.window(browser.window_handles[-1])
+
+        if desconsolidada == True:
+            browser.execute_script('window.print();')
+            browser.close()
+            browser.switch_to.window(browser.window_handles[0])
+            browser.switch_to.window(browser.window_handles[-1])
+
+        origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\"+os.getlogin()+"\Downloads")
+        destino = path
+        try:
+            shutil.move(origem, destino)
+        except:
+            pass
+
+        return "Arquivos Salvos"
+
+    elif aux == "inline": # Livro está fechado
+    #except:
+        _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Relatórios')]") # Clicar em Relatórios
+        # _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Relatório de NFS’e Emitidas')]") # Clicar em Relatórios
+        _clicar_pelo_XPATH(browser, "/html/body/div[1]/div[1]/div[2]/div/div[2]/div/nav/ul/li[8]/ul/li[1]/a")  # Clicar em Relatórios
+
+        competencia = str(ano) + '-' + str(_converte_mes(mes))
+        time.sleep(1)
+        browser.find_elements_by_xpath("//option[@value='" + competencia + "']")[1].click()  # Selecionar oeríodo final
+        browser.find_element_by_xpath("//option[@value='" + competencia + "']").click()  # Selecionar período inicial
+        time.sleep(1)
+        _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/div/input") # Clicar em Gerar Relatório
+
+        # Salvar pdf do relatório de notas
+        browser.switch_to.window(browser.window_handles[0])
+        browser.switch_to.window(browser.window_handles[-1])
+        browser.execute_script('window.print();')
+        browser.close()
+        browser.switch_to.window(browser.window_handles[0])
+        browser.switch_to.window(browser.window_handles[-1])
+
+        origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")("C:\\Users\\"+os.getlogin()+"\Downloads")
+        destino = path
+        try:
+            shutil.move(origem, destino)
+        except:
+            pass
+
+        return "Arquivos Salvos"
+
+def _exportar_notas_fiscais_prestados(nome_contabil, browser, ano, mes):
+    path = "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Contábil\\NFSe\\"
+    path += nome_contabil
+
+    _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Notas Eletrônicas')]")  # Clicar em Notas Eletrônicas
+    _clicar_pelo_XPATH(browser, "//*[contains(text(), 'Exportar Notas')]")  # Clicar em Exportar Notas
+    mes = int(_converte_mes(mes))
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[1]/div[1]/div/select")
+    browser.find_element_by_xpath("//option[@value='" + str(mes) + "']").click()  # Selecionar mes
+    browser.find_element_by_xpath("//option[@value='" + str(ano) + "']").click()  # Selecionar ano
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/div/input[4]")  # Clicar em Exportar XML Abrasf 2.0
+
+    _esperar(2)
+
+    browser.close()
+    browser.switch_to.window(browser.window_handles[0])
+    browser.switch_to.window(browser.window_handles[-1])
+
+    origem = _pegar_ultimo_arquivo_modificado("E:\\Users\\thiago.madeira\\Downloads")#("C:\\Users\\"+os.getlogin()+"\Downloads")
+    destino = path
+    _exclui_arquivos(destino, ".xml")
+
+    if ".xml" in str(origem):
+        shutil.move(origem, destino)
+        return "Arquivos Salvos"
+    else:
+        return "Sem Movimento"
 
 def _selecionar_certificado():
     time.sleep(1)
-    pyautogui.press('down')
+    #pyautogui.press('down')
     pyautogui.press('enter')
 
+
 def _tomados(ano, mes, dfs):
+    ### BEGIN - Configuração para salvar o pdf ###
+    appState = {
+        "recentDestinations": [
+            {
+                "id": "Save as PDF",
+                "origin": "local",
+                "account": ""
+            }
+        ],
+        "selectedDestinationId": "Save as PDF",
+        "version": 2
+    }
+    profile = {'printing.print_preview_sticky_settings.appState': json.dumps(appState),
+               'safebrowsing.enabled': 'false',
+               # 'savefile.default_directory': 'C:\\Users\\thiago.madeira\Desktop\\temp'
+               }
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_experimental_option('prefs', profile)
+    chrome_options.add_argument('--kiosk-printing')
+    ### END - Configuração para salvar o pdf ###
+
+    browser = webdriver.Chrome(options=chrome_options,
+                               executable_path= "P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Sistemas Internos\Fechar Livros\chromedriver.exe")
+    browser.implicitly_wait(1)
+    thread1 = threading.Thread(target=_selecionar_certificado)
+    thread1.start()
+    browser.get('https://nfse.pjf.mg.gov.br/site/')
+    browser.maximize_window()
+    browser.get('https://nfse.pjf.mg.gov.br/contador/login.php')
+
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/div/div[2]/div/div[2]/div/nav/ul/li[1]/a/span[1]") # Utilitários
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/div/div[2]/div/div[2]/div/nav/ul/li[1]/ul/li[5]/a") # Visitar Cliente
+    _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[1]/input") # Campo de Procurar
+
+    for df in dfs:
+        df = pd.read_csv(df, encoding='latin-1', sep=';', converters={'CNPJ': lambda x: str(x)})
+        for index in df.index:
+            cnpj = _completa_cnpj(df.at[index, df.columns[1]])
+            nome_pasta = df.at[index, df.columns[0]]
+            if nome_pasta[-1] == " ": # Remover espaço em branco ao final
+                nome_pasta = nome_pasta[:-1]
+            browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/div[2]/input[1]").clear()
+            browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/div[2]/input[1]").send_keys(str(cnpj)) # Digitar CNPJ
+            _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/input[5]") # Clicar em Procurar
+            _esperar(2)
+            # Clicar no primeiro resultado
+            nao_cadastrado = False
+            deu = False
+            while deu == False:
+                try:
+                    _clicar_pelo_XPATH(browser,
+                                       "/html/body/div[1]/section/div/div/div/form/table/tbody[3]/tr[1]/td[2]/a")
+                    deu = True
+                except:
+                    _esperar(1)
+                    try:
+                        if browser.find_element_by_xpath(
+                                "/html/body/div[1]/section/div/div/div/form/table/tbody[3]/tr/td").text == "Não foram encontrados resultados que atendem à sua pesquisa.":
+                            nao_cadastrado = True
+                            break
+                    except:
+                        pass
+
+            if nao_cadastrado == True:
+                _esperar(2)
+                file = open("relatorio_tomados_" + mes + "-" + ano + ".txt", "a+")
+                file.write(nome_pasta + " - " + "Não cadastrado no site" + "\n")
+                file.close()
+
+            else:
+                _aceitar_notas(ano, mes, browser)
+                aux = _relatorio_tomados(nome_pasta, ano, mes, browser)  # tomados
+                tem_nota = _pdf_notas_tomados(nome_pasta, ano, mes, browser)  # tomados
+                if tem_nota:
+                    _exportar_notas_fiscais_tomados(nome_pasta, ano, mes, browser)  # tomados
+                else:
+                    aux += " (sem movimento)"
+
+                file = open("relatorio_tomados_" + mes + "-" + ano + ".txt", "a+")
+                file.write(nome_pasta + " - " + aux + "\n")
+                file.close()
+
+def _prestados(ano, mes, dfs):
     ### BEGIN - Configuração para salvar o pdf ###
     appState = {
         "recentDestinations": [
@@ -526,7 +597,8 @@ def _tomados(ano, mes, dfs):
     chrome_options.add_argument('--kiosk-printing')
     ### END - Configuração para salvar o pdf ###
 
-    browser = webdriver.Chrome(options=chrome_options)
+    browser = webdriver.Chrome(options=chrome_options,
+                               executable_path="P:\documentos\OneDrive - Novus Contabilidade\Doc Compartilhado\Sistemas Internos\Fechar Livros\chromedriver.exe")
     browser.implicitly_wait(1)
     thread1 = threading.Thread(target=_selecionar_certificado)
     thread1.start()
@@ -535,68 +607,57 @@ def _tomados(ano, mes, dfs):
     browser.get('https://nfse.pjf.mg.gov.br/contador/login.php')
 
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/div/div[2]/div/div[2]/div/nav/ul/li[1]/a/span[1]") # Utilitários
+    try:
+        _clicar_pelo_XPATH(browser, "/html/body/div[4]/div/input")  # Aviso da Prefeitura sobre coronavirus
+    except:
+        pass
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/div/div[2]/div/div[2]/div/nav/ul/li[1]/ul/li[5]/a") # Visitar Cliente
     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[1]/input") # Campo de Procurar
 
     for df in dfs:
-        df = pd.read_excel(df, encoding='latin-1', sep=';', converters={'cnpj': lambda x: str(x)})
+        df = pd.read_csv(df, encoding='latin-1', sep=';', converters={'CNPJ': lambda x: str(x)})
+
         for index in df.index:
-            cnpj = df.at[index, df.columns[1]]
+
+            cnpj = _completa_cnpj(df.at[index, df.columns[1]])
             nome_pasta = df.at[index, df.columns[0]]
+            if nome_pasta[-1] == " ": # Remover espaço em branco ao final
+                nome_pasta = nome_pasta[:-1]
+            browser.switch_to.window(browser.window_handles[0])
             browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/div[2]/input[1]").clear()
             browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/div[2]/input[1]").send_keys(str(cnpj)) # Digitar CNPJ
             _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/div[2]/input[5]") # Clicar em Procurar
 
+            file = open("relatorio_prestados_" + mes + "-" + ano + ".txt", "a+")
+
             # Clicar no primeiro resultado
+            nao_cadastrado = False
             deu = False
             while deu == False:
                 try:
                     _clicar_pelo_XPATH(browser, "/html/body/div[1]/section/div/div/div/form/table/tbody[3]/tr[1]/td[2]/a")
                     deu = True
-                except StaleElementReferenceException:
+                except :
                     time.sleep(1)
-                except ElementNotInteractableException:
-                    time.sleep(1)
+                    try:
+                        if browser.find_element_by_xpath("/html/body/div[1]/section/div/div/div/form/table/tbody[3]/tr/td").text == "Não foram encontrados resultados que atendem à sua pesquisa.":
+                            nao_cadastrado = True
+                            break
+                    except:
+                        pass
 
-            _aceitar_notas(ano, mes, browser)
-            _relatorio_tomados(nome_pasta, ano, mes, browser)  # tomados
-            tem_nota = _pdf_notas_tomados(nome_pasta, ano, mes, browser)  # tomados
-            if tem_nota:
-                _exportar_notas_fiscais_tomados(nome_pasta, ano, mes, browser)  # tomados
+            if nao_cadastrado == True:
+                file.write(nome_pasta + " - " + "Não cadastrado no site" + "\n")
+                file.close()
 
-def _prestados():
-    df = pd.read_excel("Taciane.xlsx", sep=";", converters={'C.N.P.J./C.P.F./C.E.I./C.A.E.P.F.': lambda x: str(x)})
-    dictionary = {}
+            else:
+                aux = _relatorio_prestados(nome_pasta, ano, mes, browser)
+                print (aux)
 
-    file = open("relatorio_Taciane.txt", "a+")
-
-    for i in df.index:
-        cnpj = str(df.at[i, "C.N.P.J./C.P.F./C.E.I./C.A.E.P.F."])
-        cnpj = cnpj.replace("\"", "")
-        dictionary[cnpj] = [0, 0]
-        dictionary[cnpj][0] = df.at[i, "Apelido"]  # nome contabil
-        dictionary[cnpj][1] = df.at[i, "Apelido"]  # nome fiscal
-
-    ano = app.getEntry("Ano")
-
-    mes = app.getEntry("Mês")
-    segundos = int(app.getEntry("segundos"))
-
-    for item in dictionary:
-
-        nome_contabil = dictionary[item][0]
-        nome_fiscal = dictionary[item][1]
-        cnpj = item
-
-        aux = _relatorio_prestados(nome_fiscal, ano, mes, segundos, cnpj)  # prestados
-        print(aux)
-        if aux == "nao existe pasta" or aux == "eh_comercio" or aux == "nao_achou":
-            file = open("relatorio_Taciane.txt", "a+")
-            file.write(nome_contabil + " " + aux + "\n")
-            file.close()
-            continue
-        elif aux == "relatorio prestados salvo":
-            _exportar_notas_fiscais_prestados(nome_contabil, segundos)  # prestados
-            file = open("relatorio_Taciane.txt", "a+")
-            file.write(nome_contabil + " " + aux + "\n")
-            file.close()
+                if aux == "Arquivos Salvos":
+                    aux = _exportar_notas_fiscais_prestados(nome_pasta, browser, ano, mes)
+                    file.write(nome_pasta + " - " + aux + "\n")
+                    file.close()
+                else:
+                    file.write(nome_pasta + " - " + aux + "\n")
+                    file.close()
